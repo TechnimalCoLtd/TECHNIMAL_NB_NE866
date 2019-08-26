@@ -1,0 +1,19 @@
+{
+  "name": "TECHNIMAL_NB_NE866",
+  "frameworks": "Arduino",
+  "keywords": "OWL, NB-IoT, NE866, Telit, Technimal",
+  "description": "Arduino, ESP8266 and ESP32 Library for NB NE866",
+  "url": "https://github.com/TechnimalCoLtd/TECHNIMAL_NB_NE866",
+  "authors":
+  {
+    "name": "Technimal Co., Ltd.",
+    "maintainer": true
+  },
+  "repository":
+  {
+      "type": "git",
+      "url": "https://github.com/TechnimalCoLtd/TECHNIMAL_NB_NE866.git"
+  }, 
+  "version": "0.1",
+  "platforms": "*"
+}
