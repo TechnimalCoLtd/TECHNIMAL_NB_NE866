@@ -40,10 +40,7 @@ String createOptions() {
     // option.valueUInt = 7000;
     // res = nb.CreateCoAPOption(option);
     //
-    // option.code = URI_PATH;
-    // option.valueType = 0;
-    // option.valueUInt = path;
-    // res += nb.CreateCoAPOption(URI_PORT, option);
+    // res += nb.PathToCoAPOptions(URI_PORT, path);
 
     res = nb.PathToCoAPOptions(0, path);
     return res;
