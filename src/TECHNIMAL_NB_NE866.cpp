@@ -18,6 +18,9 @@ TECHNIMAL_NB_NE866::TECHNIMAL_NB_NE866() {
 	_Port = F("5683");
 	_Token = F("");
 	_MsgID = 1;
+	_imei = "";
+	_imsi = "";
+	_ccid = "";
 }
 
 void TECHNIMAL_NB_NE866::SetupModule(Stream* serial, String host, String port) {
@@ -96,33 +99,47 @@ String TECHNIMAL_NB_NE866::GetFirmwareVersion(){
 }
 
 String TECHNIMAL_NB_NE866::GetIMEI() {
-	_Serial->println(F("AT+CGSN"));
-	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
-	if (res.status == 1)
-		res.data.replace(F("OK"),"");
+	if (_imei == "") {
+		_Serial->println(F("AT+CGSN"));
+		TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
+		if (res.status == 1) {
+			res.data.replace(F("OK"),"");
+			delay(1500); // After read IMEI need to wait around 1.5 sec
+			res.data.trim();
+			_imei = res.data;
+		}
+	}
 	clearInputBuffer();
-	delay(1500); // After read IMEI need to wait around 1.5 sec
-	return res.data;
+	return _imei;
 }
 
 String TECHNIMAL_NB_NE866::GetIMSI() {
-	_Serial->println(F("AT+CIMI"));
-	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
-	if (res.status == 1)
-		res.data.replace(F("OK"),"");
+	if (_imsi == "") {
+		_Serial->println(F("AT+CIMI"));
+		TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
+		if (res.status == 1) {
+			res.data.replace(F("OK"),"");
+			res.data.trim();
+			_imsi = res.data;
+		}
+	}
 	clearInputBuffer();
-	return res.data;
+	return _imsi;
 }
 
 String TECHNIMAL_NB_NE866::GetCCID() {
-	_Serial->println(F("AT+CCID"));
-	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
-	if (res.status == 1) {
-		res.data.replace(F("OK"),"");
-		res.data.replace(F("+CCID: "), "");
+	if (_ccid == "") {
+		_Serial->println(F("AT+CCID"));
+		TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(1000, F("OK"));
+		if (res.status == 1) {
+			res.data.replace(F("OK"),"");
+			res.data.replace(F("+CCID: "), "");
+			res.data.trim();
+			_ccid = res.data;
+		}
 	}
 	clearInputBuffer();
-	return res.data;
+	return _ccid;
 }
 
 String TECHNIMAL_NB_NE866::GetDeviceIP() {
@@ -133,7 +150,8 @@ String TECHNIMAL_NB_NE866::GetDeviceIP() {
 		res.data = res.data.substring(index+1, res.data.length());
 	}
 	clearInputBuffer();
-	return res.data;
+	res.data.trim();
+	return res.data.substring(1, res.data.length() - 1);
 }
 
 bool TECHNIMAL_NB_NE866::Connect() {
@@ -598,7 +616,7 @@ bool TECHNIMAL_NB_NE866::SendPacket(String packet) {
 	if (!createSocket()) return false;
 
 #ifdef DEBUG
-	Serial.println(F("\n========="));
+	Serial.println(F("========="));
 	Serial.print(F("# Sending data to "));
 	Serial.print(_Host);
 	Serial.print(F(":"));
@@ -650,8 +668,8 @@ TECHNIMAL_NB_NE866_RAW_RES TECHNIMAL_NB_NE866::WaitingResponse(long timeout) {
 		if (_Serial->available()) {
 			char data = (char)_Serial->read();
 			if (data == '\n' || data == '\r') {
-				countFoundEnd++;
-				if (countFoundEnd > 3) break;
+			 	countFoundEnd++;
+			 	if (countFoundEnd > 3) break;
 			} else {
 				input += data;
 				if (input.indexOf(F("SRING: ")) != -1) startTime = millis();
@@ -659,10 +677,11 @@ TECHNIMAL_NB_NE866_RAW_RES TECHNIMAL_NB_NE866::WaitingResponse(long timeout) {
 		}
 		if (millis() - startTime > timeout) {
 #ifdef DEBUG
-			Serial.println(F("# TIMEOUT"));
-#endif
+			Serial.print(F("# TIMEOUT : "));
+			Serial.println(input);
+#endif		
 			res.status = 2;
-			return res;
+			break;
 		}
 	}
 
@@ -693,7 +712,7 @@ TECHNIMAL_NB_NE866_RAW_RES TECHNIMAL_NB_NE866::WaitingResponse(long timeout) {
 			res.status = 1;
 		}
 #ifdef DEBUG
-		Serial.println(F("\n========="));
+		Serial.println(F("========="));
 		Serial.print(F("Receive data from "));
 		Serial.print(res.ip);
 		Serial.print(F(":"));

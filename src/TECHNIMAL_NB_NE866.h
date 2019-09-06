@@ -156,12 +156,15 @@ private:
 	String _Host;
 	String _Port;
 	String _Token;
+	String _imei;
+	String _imsi;
+	String _ccid;
 
 	unsigned int _MsgID;
 
 	bool socketCreated = false;
 protected:
-	Stream *_Serial;	
+	Stream *_Serial;
 };
 
 #endif
