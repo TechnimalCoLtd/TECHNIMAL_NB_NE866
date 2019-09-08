@@ -21,6 +21,7 @@ TECHNIMAL_NB_NE866::TECHNIMAL_NB_NE866() {
 	_imei = "";
 	_imsi = "";
 	_ccid = "";
+	_buffer = "";
 }
 
 void TECHNIMAL_NB_NE866::SetupModule(Stream* serial, String host, String port) {
@@ -60,16 +61,19 @@ void TECHNIMAL_NB_NE866::SetupModule(Stream* serial, String host, String port) {
 }
 
 void TECHNIMAL_NB_NE866::RebootModule() {
-	_Serial->println(F("AT"));
-	WaitingResponseFromModule(1000, F("OK"));
+	bool done = false;
+	while (!done) {
+		_Serial->println(F("AT"));
+		WaitingResponseFromModule(1000, F("OK"));
 
 #ifdef DEBUG
-	Serial.print(F("# Reboot Module"));
+		Serial.print(F("# Reboot Module"));
 #endif
 
-	_Serial->println(F("AT#REBOOT"));
+		_Serial->println(F("AT#REBOOT"));
 
-	WaitModuleReady();
+		done = WaitModuleReady();
+	}
 
 #ifdef DEBUG
 	Serial.println();
@@ -78,20 +82,28 @@ void TECHNIMAL_NB_NE866::RebootModule() {
     _Serial->flush();
 }
 
-void TECHNIMAL_NB_NE866::WaitModuleReady() {
+bool TECHNIMAL_NB_NE866::WaitModuleReady() {
+	unsigned char trycount = 0;
 	unsigned char count = 0;
-	while (count <= 1){
+	while (trycount < 15){
 #ifdef DEBUG
 		Serial.print(F("."));
 #endif
 		if (WaitingResponseFromModule(1000, F("OK")).status == 1) {
 			count++;
-		}
-	}
-
+			if (count > 1) {
 #ifdef DEBUG
-	Serial.println(F("OK"));
+				Serial.println(F("OK"));
 #endif
+				return true;
+			}
+		}
+		trycount++;
+	}
+#ifdef DEBUG
+	Serial.println(F("Failed"));
+#endif
+	return false;
 }
 
 String TECHNIMAL_NB_NE866::GetFirmwareVersion(){
@@ -148,13 +160,19 @@ String TECHNIMAL_NB_NE866::GetCCID() {
 }
 
 String TECHNIMAL_NB_NE866::GetDeviceIP() {
-	_Serial->println(F("AT+CGPADDR=0"));
-	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(3000, F("+CGPADDR"));
-	if (res.status == 1) {
-		int index = res.data.indexOf(F(","));
-		res.data = res.data.substring(index+1, res.data.length());
+	TECHNIMAL_NB_NE866_MODULE_RES res;
+	res.status = 0;
+	while (res.status != 1) {
+		_Serial->println(F("AT+CGPADDR=0"));
+		res = WaitingResponseFromModule(3000, F("+CGPADDR"));
+		clearInputBuffer();
+		if (res.status == 1) {
+			int index = res.data.indexOf(F(","));
+			res.data = res.data.substring(index+1, res.data.length());
+		} else {
+			delay(200);
+		}
 	}
-	clearInputBuffer();
 	res.data.trim();
 	return res.data.substring(1, res.data.length() - 1);
 }
@@ -263,9 +281,12 @@ TECHNIMAL_NB_NE866_MODULE_RES TECHNIMAL_NB_NE866::WaitingResponseFromModule(long
 	TECHNIMAL_NB_NE866_MODULE_RES res;
 	res.status = 0;
 	res.data = "";
+	_buffer = "";
 	while(true) {
 		if (_Serial->available()) {
-			res.data += _Serial->readStringUntil('\n');
+			String data = _Serial->readStringUntil('\n');
+			_buffer += data;
+			res.data += data;
 			if (res.data.indexOf(waiting_key)>=0) {
 				res.status = 1;
 				break;
@@ -334,6 +355,7 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::Delete(String path) {
 TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 	unsigned long timeout[5]={2000,4000,8000,16000,32000};
 	TECHNIMAL_NB_NE866_COAP_RES coapreq = ParseCoAPMessage(packet);
+	Serial.println("Send request for msg id "+String(coapreq.msgID));
 	for (int i=0;i<5;i++) {
 		clearInputBuffer();
 		for (int j=0;j<5;j++) {
@@ -342,6 +364,8 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 				if (res.status == 1) {
 					TECHNIMAL_NB_NE866_COAP_RES tmpresp = ParseCoAPMessage(res.data);
 					if (coapreq.token == tmpresp.token && coapreq.msgID == tmpresp.msgID) {
+						Serial.println("Got response for msg id "+String(coapreq.msgID));
+						closeSocket();
 						return tmpresp;
 					}
 				}
@@ -353,6 +377,7 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 #endif
 		}
 	}
+	closeSocket();
 	TECHNIMAL_NB_NE866_COAP_RES coapresp;
 	return coapresp;
 }
@@ -459,7 +484,7 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::ParseCoAPMessage(String data) {
 #endif
 
 	// Status
-	char statusbuf[2] = {data[2], data[3]};
+	char statusbuf[3] = {data[2], data[3], '\0'};
 	res.status = strtol(statusbuf, NULL, 16);
 
 #ifdef DEBUG
@@ -557,7 +582,7 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::ParseCoAPMessage(String data) {
 #endif
 
 	// Message id
-	char msgidbuf[4] = {data[4], data[5], data[6], data[7]};
+	char msgidbuf[5] = {data[4], data[5], data[6], data[7], '\0'};
 	res.msgID = strtol(msgidbuf, NULL, 16);
 #ifdef DEBUG
 	Serial.print(F("# Message id : "));
@@ -650,25 +675,20 @@ bool TECHNIMAL_NB_NE866::SendPacket(String packet) {
 		return false;
 	}
 
-	// Send pakcet to module
 	_Serial->print(packet);
 	_Serial->write(13);
-	_Serial->flush();
+
 #ifdef DEBUG
 	Serial.print(F("# Data : "));
 	Serial.println(packet);
 #endif
 
-	res = WaitingResponseFromModule(6000, F("OK"));
+	WaitingResponseFromModule(6000, F("OK"));
+
 #ifdef DEBUG
-	if (res.status == 1) {
-		Serial.println("# Successfully");
-	} else {
-		Serial.println("# Failed");
-	}
 	Serial.println(F("========="));
 #endif
-	return res.status == 1;
+	return true;
 }
 
 TECHNIMAL_NB_NE866_RAW_RES TECHNIMAL_NB_NE866::WaitingResponse(long timeout) {
@@ -676,29 +696,33 @@ TECHNIMAL_NB_NE866_RAW_RES TECHNIMAL_NB_NE866::WaitingResponse(long timeout) {
 	res.status = 0;
 
 	String input = "";
-	int countFoundEnd = 0;
-	unsigned long startTime = millis();
-	while (true) {
-		if (_Serial->available()) {
-			char data = (char)_Serial->read();
-			if (data == '\n' || data == '\r') {
-			 	countFoundEnd++;
-			 	if (countFoundEnd > 3) break;
-			} else {
-				input += data;
-				if (input.indexOf(F("SRING: ")) != -1) startTime = millis();
+	if (_buffer.indexOf(F("SRING: ")) != -1) {
+		input = _buffer;
+	} else {
+		int countFoundEnd = 0;
+		unsigned long startTime = millis();
+		while (true) {
+			if (_Serial->available()) {
+				char data = (char)_Serial->read();
+				if (data == '\n' || data == '\r') {
+					countFoundEnd++;
+					if (countFoundEnd > 3) break;
+				} else {
+					input += data;
+					if (input.indexOf(F("SRING: ")) != -1) startTime = millis();
+				}
+			}
+			if (millis() - startTime > timeout) {
+#ifdef DEBUG
+				Serial.print(F("# TIMEOUT : "));
+				Serial.println(input);
+#endif		
+				res.status = 2;
+				break;
 			}
 		}
-		if (millis() - startTime > timeout) {
-#ifdef DEBUG
-			Serial.print(F("# TIMEOUT : "));
-			Serial.println(input);
-#endif		
-			res.status = 2;
-			break;
-		}
 	}
-
+	_buffer = "";
 	int start = input.indexOf(F("SRING: "));
 	int stop = input.indexOf(F(","), start);
 	if (start > -1 && stop > -1) {
@@ -763,6 +787,20 @@ bool TECHNIMAL_NB_NE866::createSocket() {
 #endif
 	if (res.status == 1) socketCreated = true;
 	return socketCreated || res.status == 1;
+}
+
+bool TECHNIMAL_NB_NE866::closeSocket() {
+	_Serial->println("AT#SH=1");
+	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(3000, F("OK"));
+	socketCreated = res.status != 1;
+#ifdef DEBUG
+	if (!socketCreated) {
+		Serial.println("# Close socket successful");
+	} else {
+		Serial.println(F("# Close socket failed"));
+	}
+#endif
+	return socketCreated;
 }
 
 void TECHNIMAL_NB_NE866::setEchoOff() {

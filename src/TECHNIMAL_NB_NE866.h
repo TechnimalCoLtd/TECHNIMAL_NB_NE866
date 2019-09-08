@@ -107,7 +107,7 @@ public:
 	// Initial
 	void SetupModule(Stream* serial, String host, String port);
 	void RebootModule();
-	void WaitModuleReady();
+	bool WaitModuleReady();
 
 	String GetIMEI();
 	String GetIMSI();
@@ -144,7 +144,9 @@ public:
 	
 
 private:
+	TECHNIMAL_NB_NE866_MODULE_RES sendMsgChunk();
 	bool createSocket();
+	bool closeSocket();
 	void setEchoOff();
 	void clearInputBuffer();
 	TECHNIMAL_NB_NE866_SIGNAL getSignal(unsigned char state);
@@ -159,6 +161,7 @@ private:
 	String _imei;
 	String _imsi;
 	String _ccid;
+	String _buffer;
 
 	unsigned int _MsgID;
 
