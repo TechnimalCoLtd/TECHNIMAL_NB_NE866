@@ -51,6 +51,11 @@ void TECHNIMAL_NB_NE866::SetupModule(Stream* serial, String host, String port) {
 
 	Serial.print(F("# CCID :  "));
 	Serial.println(GetCCID());
+#else
+	Serial.println(F("# Initial module"));
+	GetIMEI();
+	GetIMSI();
+	GetCCID();
 #endif
 }
 
@@ -155,9 +160,7 @@ String TECHNIMAL_NB_NE866::GetDeviceIP() {
 }
 
 bool TECHNIMAL_NB_NE866::Connect() {
-#ifdef DEBUG
 	Serial.print("# Geting signal");
-#endif
 	TECHNIMAL_NB_NE866_SIGNAL signal;
 	while(1) {
 		signal = getSignal(0);
@@ -169,13 +172,13 @@ bool TECHNIMAL_NB_NE866::Connect() {
 	}
 #ifdef DEBUG
 		Serial.println("Got signal");
+#else
+		Serial.println();
 #endif
 
 
 	if (!isConnected()) {
-#ifdef DEBUG
 		Serial.print(F("# Connecting NB-IoT Network."));
-#endif
 		for(int i=1;i<60;i+=1){
 			setPhoneFunction(1);
 			setAutoConnectOn();
@@ -307,14 +310,18 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::Get(String path) {
 TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::Post(String path, String payload) {
 	String packet = GetCoAPHeader(POST);
 	packet += PathToCoAPOptions(0, path);
-	packet += CreatePayload(payload);
+	if (payload != "") {
+		packet += CreatePayload(payload);
+	}
 	return SendCoAPPacket(packet);
 }
 
 TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::Put(String path, String payload) {
 	String packet = GetCoAPHeader(PUT);
 	packet += PathToCoAPOptions(0, path);
-	packet += CreatePayload(payload);
+	if (payload != "") {
+		packet += CreatePayload(payload);
+	}
 	return SendCoAPPacket(packet);
 }
 
@@ -414,7 +421,14 @@ String TECHNIMAL_NB_NE866::CreateCoAPOption(int prevOptionCode, TECHNIMAL_NB_NE8
 		value = IntToHex2xStr(option.valueUInt);
 		len = value.length() / 2;
 	}
-	return IntToHexStr(optionCode) + IntToHexStr(len) + value;
+	String hexLen = "";
+	if (len > 13) {
+		hexLen = "d" + IntToHex2xStr(len - 13);
+	} else {
+		hexLen = IntToHexStr(len);
+	}
+
+	return IntToHexStr(optionCode) + hexLen + value;
 }
 
 String TECHNIMAL_NB_NE866::CreatePayload(String payload) {
