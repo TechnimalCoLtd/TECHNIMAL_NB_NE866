@@ -140,7 +140,8 @@ public:
 	// General
 	bool SendPacket(String packet);
 	TECHNIMAL_NB_NE866_RAW_RES WaitingResponse(long timeout);
-	TECHNIMAL_NB_NE866_MODULE_RES WaitingResponseFromModule(long timeout, String waiting_key);
+	TECHNIMAL_NB_NE866_MODULE_RES WaitingResponseFromModule(long timeout, String key);
+	TECHNIMAL_NB_NE866_MODULE_RES WaitingResponseFromModule(long timeout, String first_key, String second_key);
 	
 
 private:

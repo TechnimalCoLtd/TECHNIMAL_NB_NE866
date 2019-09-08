@@ -276,7 +276,11 @@ TECHNIMAL_NB_NE866_PING_RES TECHNIMAL_NB_NE866::Ping() {
 	return ping_res;
 }
 
-TECHNIMAL_NB_NE866_MODULE_RES TECHNIMAL_NB_NE866::WaitingResponseFromModule(long timeout, String waiting_key) {
+TECHNIMAL_NB_NE866_MODULE_RES TECHNIMAL_NB_NE866::WaitingResponseFromModule(long timeout, String key) {
+	return WaitingResponseFromModule(timeout, key, F("N/A"));
+}
+
+TECHNIMAL_NB_NE866_MODULE_RES TECHNIMAL_NB_NE866::WaitingResponseFromModule(long timeout, String first_key, String second_key) {
 	unsigned long start_time = millis();
 	TECHNIMAL_NB_NE866_MODULE_RES res;
 	res.status = 0;
@@ -287,7 +291,7 @@ TECHNIMAL_NB_NE866_MODULE_RES TECHNIMAL_NB_NE866::WaitingResponseFromModule(long
 			String data = _Serial->readStringUntil('\n');
 			_buffer += data;
 			res.data += data;
-			if (res.data.indexOf(waiting_key)>=0) {
+			if (res.data.indexOf(first_key)>=0 || res.data.indexOf(second_key)>=0) {
 				res.status = 1;
 				break;
 			}
@@ -355,7 +359,8 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::Delete(String path) {
 TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 	unsigned long timeout[5]={2000,4000,8000,16000,32000};
 	TECHNIMAL_NB_NE866_COAP_RES coapreq = ParseCoAPMessage(packet);
-	Serial.println("Send request for msg id "+String(coapreq.msgID));
+	Serial.print(F("Send request for msg id "));
+	Serial.println(coapreq.msgID);
 	for (int i=0;i<5;i++) {
 		clearInputBuffer();
 		for (int j=0;j<5;j++) {
@@ -364,8 +369,8 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 				if (res.status == 1) {
 					TECHNIMAL_NB_NE866_COAP_RES tmpresp = ParseCoAPMessage(res.data);
 					if (coapreq.token == tmpresp.token && coapreq.msgID == tmpresp.msgID) {
-						Serial.println("Got response for msg id "+String(coapreq.msgID));
-						closeSocket();
+						Serial.print(F("Got response for msg id "));
+						Serial.println(coapreq.msgID);
 						return tmpresp;
 					}
 				}
@@ -377,7 +382,6 @@ TECHNIMAL_NB_NE866_COAP_RES TECHNIMAL_NB_NE866::SendCoAPPacket(String packet) {
 #endif
 		}
 	}
-	closeSocket();
 	TECHNIMAL_NB_NE866_COAP_RES coapresp;
 	return coapresp;
 }
@@ -683,7 +687,7 @@ bool TECHNIMAL_NB_NE866::SendPacket(String packet) {
 	Serial.println(packet);
 #endif
 
-	WaitingResponseFromModule(6000, F("OK"));
+	WaitingResponseFromModule(6000, F("OK"), F("SRING: "));
 
 #ifdef DEBUG
 	Serial.println(F("========="));
@@ -790,12 +794,12 @@ bool TECHNIMAL_NB_NE866::createSocket() {
 }
 
 bool TECHNIMAL_NB_NE866::closeSocket() {
-	_Serial->println("AT#SH=1");
+	_Serial->println(F("AT#SH=1"));
 	TECHNIMAL_NB_NE866_MODULE_RES res = WaitingResponseFromModule(3000, F("OK"));
 	socketCreated = res.status != 1;
 #ifdef DEBUG
 	if (!socketCreated) {
-		Serial.println("# Close socket successful");
+		Serial.println(F("# Close socket successful"));
 	} else {
 		Serial.println(F("# Close socket failed"));
 	}
